@@ -12,70 +12,76 @@ struct RippleModifier: ViewModifier {
     var aberration: Float = 0.2
     var ringThickness: Float = 0.45
     var intensity: Float = 0.15
-    
-    @State private var tapLocation = CGPoint.zero
-    @State private var isRippling = false
-    @State private var resetTask: Task<Void, Error>?
-    
+    var isRippling: Bool
+    var tapLocation = CGPoint.zero
+
     func body(content: Content) -> some View {
-        Group {
-            if isRippling {
-                let startDate = Date.now
-                let tap = tapLocation
-                TimelineView(.animation) { timeline in
-                    let timeOffset = timeline.date.timeIntervalSince(startDate)
+        if #available(iOS 17.0, *) {
+            Group {
+                if isRippling {
+                    let startDate = Date.now
+                    let tap = tapLocation
+                    TimelineView(.animation) { timeline in
+                        let timeOffset = timeline.date.timeIntervalSince(startDate)
+                        content
+                            .drawingGroup()
+                            .visualEffect { c, proxy in
+                                let center = CGVector(
+                                    dx: tap.x,
+                                    dy: tap.y
+                                )
+                                return c.layerEffect(
+                                    ShaderLibrary.bundle(.module).ripple(
+                                        .float2(center),
+                                        .float2(proxy.size),
+                                        .float(timeOffset),
+                                        .float(speed * 1.35),
+                                        .float(aberration),
+                                        .float(ringThickness),
+                                        .float(intensity)
+                                    ),
+                                    maxSampleOffset: .zero
+                                )
+                            }
+                    }
+                    .id(startDate)
+                } else {
                     content
-                        .drawingGroup()
-                        .visualEffect { c, proxy in
-                            let center = CGVector(
-                                dx: tap.x / proxy.size.width,
-                                dy: tap.y / proxy.size.height
-                            )
-                            return c.layerEffect(
-                                ShaderLibrary.bundle(.module).ripple(
-                                    .float2(center),
-                                    .float2(proxy.size),
-                                    .float(timeOffset),
-                                    .float(speed * 1.35),
-                                    .float(aberration),
-                                    .float(ringThickness),
-                                    .float(intensity)
-                                ),
-                                maxSampleOffset: .zero
-                            )
-                        }
                 }
-            } else {
-                content
             }
-        }
-        .onTapGesture { point in
-            tapLocation = point
-            isRippling = true
-            resetTask?.cancel()
-            resetTask = Task {
-                try await Task.sleep(for: .seconds(1))
-                try Task.checkCancellation()
-                isRippling = false
-            }
+        } else {
+            content
         }
     }
 }
 
 extension View {
-    public func rippling(speed: Float = 1.0,
-                         aberration: Float = 0.2,
-                         ringThickness: Float = 0.45,
-                         intensity: Float = 0.15) -> some View {
-        modifier(RippleModifier(speed: speed, aberration: aberration, ringThickness: ringThickness, intensity: intensity))
+    public func rippling(
+        speed: Float = 1.0,
+        aberration: Float = 0.2,
+        ringThickness: Float = 0.45,
+        intensity: Float = 0.15,
+        isRippling: Bool = false,
+        tapLocation: CGPoint = .zero
+    ) -> some View {
+        modifier(
+            RippleModifier(
+                speed: speed,
+                aberration: aberration,
+                ringThickness: ringThickness,
+                intensity: intensity,
+                isRippling: isRippling,
+                tapLocation: tapLocation,
+            )
+        )
     }
 }
 
 #Preview {
-    @Previewable @State var speed: Float = 1.0
-    @Previewable @State var aberration: Float = 0.2
-    @Previewable @State var thickness: Float = 0.45
-    @Previewable @State var intensity: Float = 0.15
+    @State var speed: Float = 1.0
+    @State var aberration: Float = 0.2
+    @State var thickness: Float = 0.45
+    @State var intensity: Float = 0.15
     
     Image("test", bundle: .module)
         .resizable().scaledToFit()
